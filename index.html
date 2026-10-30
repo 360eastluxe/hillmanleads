@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hillman Leads</title>
+<meta name="description" content="Hillman Group – sales team leads app">
+<meta name="theme-color" content="#1f8f4e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Hillman Leads">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  html, body { margin: 0; height: 100%; background: #14532d; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  #wrap { position: fixed; inset: 0; display: flex; flex-direction: column; }
+  #app { flex: 1; width: 100%; border: 0; background: #f4f5f7; display: block; }
+  .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; color: #fff; padding: 24px; box-sizing: border-box;
+    background: radial-gradient(circle at 50% 35%, #2aa361 0%, #1f8f4e 45%, #14532d 100%); transition: opacity .35s; }
+  .screen.gone { opacity: 0; pointer-events: none; }
+  .screen img { width: min(120px, 32vw); height: auto; border-radius: 26px; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+  .screen .name { margin-top: 18px; font-size: 18px; letter-spacing: 4px; font-weight: 700; }
+  .screen .sub { margin-top: 6px; font-size: 13px; color: #d6f0df; }
+  .screen .status { margin-top: 34px; font-size: 13px; color: #d6f0df; min-height: 18px; }
+  .dots span { display: inline-block; width: 6px; height: 6px; margin: 0 3px; border-radius: 50%; background: #fff;
+    animation: blink 1.2s infinite both; }
+  .dots span:nth-child(2) { animation-delay: .2s; } .dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .2; } 40% { opacity: 1; } }
+  .gbtn { margin-top: 18px; background: #fff; color: #14532d; border: 0; border-radius: 10px; padding: 12px 26px;
+    font-size: 15px; font-weight: 700; cursor: pointer; }
+  .lbtn { margin-top: 14px; background: transparent; color: #d6f0df; border: 0; font-size: 13px;
+    text-decoration: underline; cursor: pointer; padding: 8px; }
+  #lock, #setup { z-index: 20; }
+  .hidden { display: none !important; }
+  #install { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    background: #14532d; color: #fff; font-size: 13px; }
+  #install img { width: 32px; height: 32px; border-radius: 7px; }
+  #install .t { flex: 1; line-height: 1.3; }
+  #install button { border: 0; border-radius: 6px; padding: 8px 12px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  #instGo { background: #fff; color: #14532d; }
+  #instX { background: transparent; color: #d6f0df; font-size: 18px !important; padding: 4px 6px !important; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <iframe id="app" title="Hillman Leads" allow="clipboard-write; clipboard-read; fullscreen"></iframe>
+  <div id="install" class="hidden">
+    <img src="icons/icon-192.png" alt="">
+    <div class="t"><b>Install Hillman Leads</b><br><span id="instHow">Opens full-screen from your home screen.</span></div>
+    <button id="instGo">Install</button>
+    <button id="instX" aria-label="Close">✕</button>
+  </div>
+</div>
+
+<div id="splash" class="screen">
+  <img src="icons/icon-192.png" alt="Hillman Leads">
+  <div class="name">HILLMAN LEADS</div>
+  <div class="sub">Sales team</div>
+  <div class="status" id="status"><span class="dots"><span></span><span></span><span></span></span></div>
+  <button class="gbtn hidden" id="retry">Try again</button>
+</div>
+
+<div id="lock" class="screen hidden">
+  <img src="icons/icon-192.png" alt="Hillman Leads">
+  <div class="name">HILLMAN LEADS</div>
+  <div class="sub" id="lockText">Unlock with your fingerprint or face</div>
+  <button class="gbtn" id="lockGo">🔒 Unlock</button>
+  <button class="lbtn" id="lockPw">Use password instead</button>
+</div>
+
+<div id="setup" class="screen hidden">
+  <img src="icons/icon-192.png" alt="Hillman Leads">
+  <div class="name">FINGERPRINT / FACE UNLOCK</div>
+  <div class="sub" style="max-width:320px;line-height:1.5">The app will ask for your fingerprint or face each time it opens.
+    Your fingerprint never leaves this phone.</div>
+  <button class="gbtn" id="setupGo">Turn on</button>
+  <button class="lbtn" id="setupNo">Not now</button>
+  <div class="status" id="setupMsg"></div>
+</div>
+
+<script>
+// =====================================================================
+// THE ONLY LINE YOU EVER NEED TO EDIT:
+// your Apps Script web-app link (ending in /exec) followed by ?app
+var APP_URL = 'PASTE_YOUR_APP_LINK_HERE';
+// =====================================================================
+
+var frame = document.getElementById('app');
+var splash = document.getElementById('splash');
+var statusEl = document.getElementById('status');
+var retryBtn = document.getElementById('retry');
+var slowTimer = null, loaded = false;
+
+function say(html, showRetry) {
+  statusEl.innerHTML = html;
+  retryBtn.classList.toggle('hidden', !showRetry);
+  splash.classList.remove('gone');
+}
+
+function openApp() {
+  if (!/^https:\/\/script\.google\.com\/.+\/exec\?app/.test(APP_URL)) {
+    return say('Setup not finished: the app link (ending in /exec?app) has not been added to index.html yet.', false);
+  }
+  if (!navigator.onLine) return say('No internet connection.<br>Connect to mobile data or Wi-Fi.', true);
+  loaded = false;
+  say('<span class="dots"><span></span><span></span><span></span></span>', false);
+  clearTimeout(slowTimer);
+  slowTimer = setTimeout(function () { if (!loaded) say('Still opening… the connection seems slow.', true); }, 25000);
+  frame.src = APP_URL;
+}
+
+frame.addEventListener('load', function () {
+  if (!frame.getAttribute('src')) return;
+  loaded = true; clearTimeout(slowTimer);
+  setTimeout(function () { splash.classList.add('gone'); }, 250);
+});
+retryBtn.addEventListener('click', openApp);
+window.addEventListener('offline', function () { if (!loaded) say('No internet connection.', true); });
+window.addEventListener('online', function () { if (!loaded) openApp(); });
+
+// =====================================================================
+// STAY LOGGED IN + FINGERPRINT / FACE LOCK
+// The app inside the frame keeps its login here (this page's storage is not wiped by the phone),
+// and this page asks for the fingerprint / face before showing the app.
+// =====================================================================
+var TOKEN_KEY = 'hl_token', LOCK_KEY = 'hl_lock', RELOCK_MIN = 10;
+function store(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) {} }
+function read(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+function lockId() { return read(LOCK_KEY); }
+var hasWebAuthn = !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.create);
+var lockAvailable = Promise.resolve(false);
+if (hasWebAuthn && PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+  lockAvailable = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(function () { return false; });
+}
+function b64u(buf) {
+  var s = '', b = new Uint8Array(buf);
+  for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function unb64u(str) {
+  str = str.replace(/-/g, '+').replace(/_/g, '/'); while (str.length % 4) str += '=';
+  var s = atob(str), b = new Uint8Array(s.length);
+  for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+  return b;
+}
+function rnd(n) { var b = new Uint8Array(n); crypto.getRandomValues(b); return b; }
+
+// Only windows inside our own app frame are answered (checked by walking the frame tree).
+function fromOurFrame(src) {
+  function walk(w, depth) {
+    if (!w || depth > 6) return false;
+    if (w === src) return true;
+    try { for (var i = 0; i < w.frames.length; i++) if (walk(w.frames[i], depth + 1)) return true; } catch (e) {}
+    return false;
+  }
+  return !!src && walk(frame.contentWindow, 0);
+}
+var setupReply = null, setupUser = '';
+window.addEventListener('message', function (ev) {
+  var m = ev.data || {};
+  if (typeof m !== 'object' || String(m.type || '').indexOf('hl-') !== 0) return;
+  if (!fromOurFrame(ev.source)) return;
+  var target = /^https:\/\//.test(ev.origin) ? ev.origin : '*';   // the reply goes only to that one window
+  function reply(o) { o.id = m.id; o.shell = 'hl-1.0'; try { ev.source.postMessage(o, target); } catch (e) {} }
+  if (m.type === 'hl-save') { store(TOKEN_KEY, m.token || ''); if (!m.token) store(LOCK_KEY, ''); }
+  else if (m.type === 'hl-get') reply({ token: read(TOKEN_KEY) });
+  else if (m.type === 'hl-hello') lockAvailable.then(function (ok) { reply({ lockAvailable: !!ok, lockOn: !!lockId() }); });
+  else if (m.type === 'hl-lock-off') { store(LOCK_KEY, ''); reply({ ok: true }); }
+  else if (m.type === 'hl-lock-setup') {
+    setupReply = reply;
+    setupUser = m.name || 'Hillman user';
+    document.getElementById('setupMsg').textContent = '';
+    document.getElementById('setup').classList.remove('hidden');
+  }
+});
+
+function closeSetup(result) {
+  document.getElementById('setup').classList.add('hidden');
+  if (setupReply) setupReply(result); setupReply = null;
+}
+document.getElementById('setupNo').addEventListener('click', function () { closeSetup({ ok: false }); });
+document.getElementById('setupGo').addEventListener('click', function () {
+  var msg = document.getElementById('setupMsg');
+  msg.textContent = 'Touch the fingerprint sensor or look at the phone…';
+  navigator.credentials.create({ publicKey: {
+    challenge: rnd(32),
+    rp: { name: 'Hillman Leads' },
+    user: { id: rnd(16), name: setupUser, displayName: setupUser },
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+    authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+    timeout: 60000, attestation: 'none'
+  } }).then(function (cred) {
+    store(LOCK_KEY, b64u(cred.rawId));
+    closeSetup({ ok: true });
+  }).catch(function (e) {
+    msg.textContent = 'Not turned on (' + (e && e.name === 'NotAllowedError' ? 'cancelled' : (e && e.message || 'error')) + '). Try again or tap Not now.';
+  });
+});
+
+// ---- lock screen ----
+var lockEl = document.getElementById('lock'), lockText = document.getElementById('lockText');
+var unlocking = false;
+function askFinger() {
+  if (unlocking) return; unlocking = true;
+  lockText.textContent = 'Unlock with your fingerprint or face';
+  navigator.credentials.get({ publicKey: {
+    challenge: rnd(32),
+    allowCredentials: [{ type: 'public-key', id: unb64u(lockId()), transports: ['internal'] }],
+    userVerification: 'required', timeout: 60000
+  } }).then(function () {
+    unlocking = false;
+    lockEl.classList.add('hidden');
+    if (!frame.getAttribute('src')) openApp();
+  }).catch(function () {
+    unlocking = false;
+    lockText.textContent = 'Not unlocked. Tap Unlock to try again.';
+  });
+}
+function showLock() { lockEl.classList.remove('hidden'); askFinger(); }
+document.getElementById('lockGo').addEventListener('click', askFinger);
+document.getElementById('lockPw').addEventListener('click', function () {
+  // Forget this phone's login and the lock; the app opens on the login page.
+  store(TOKEN_KEY, ''); store(LOCK_KEY, '');
+  lockEl.classList.add('hidden');
+  if (frame.getAttribute('src')) frame.src = APP_URL; else openApp();
+});
+
+// Lock again when the app comes back after being in the background for a while.
+var hiddenAt = 0;
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (lockId() && read(TOKEN_KEY) && hiddenAt && Date.now() - hiddenAt > RELOCK_MIN * 60000) showLock();
+});
+
+if (lockId() && read(TOKEN_KEY) && hasWebAuthn) { splash.classList.add('gone'); showLock(); }
+else openApp();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+}
+
+// ---- "Install" strip: only in the browser, never inside the installed app ----
+(function () {
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if (standalone) return;
+  var bar = document.getElementById('install'), how = document.getElementById('instHow'), go = document.getElementById('instGo');
+  var KEY = 'hl_install_dismissed', deferred = null, dismissed = false;
+  try { dismissed = localStorage.getItem(KEY) === '1'; } catch (e) {}
+  if (dismissed) return;
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault(); deferred = e;
+    how.textContent = 'Opens full-screen from your apps list.';
+    go.classList.remove('hidden'); bar.classList.remove('hidden');
+  });
+  window.addEventListener('appinstalled', function () { bar.classList.add('hidden'); });
+  setTimeout(function () {
+    if (deferred) return;
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    how.innerHTML = ios ? 'Tap <b>Share</b> → <b>Add to Home Screen</b>.' : 'Tap <b>⋮</b> (top right) → <b>Install app</b> or <b>Add to Home screen</b>.';
+    go.classList.add('hidden'); bar.classList.remove('hidden');
+  }, 4000);
+  go.addEventListener('click', function () {
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.then(function () { deferred = null; bar.classList.add('hidden'); });
+  });
+  document.getElementById('instX').addEventListener('click', function () {
+    bar.classList.add('hidden');
+    try { localStorage.setItem(KEY, '1'); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
