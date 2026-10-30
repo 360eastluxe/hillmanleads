@@ -159,13 +159,15 @@ function fromOurFrame(src) {
   }
   return !!src && walk(frame.contentWindow, 0);
 }
-var setupReply = null, setupUser = '';
+var setupReply = null, setupUser = '', appWin = null, appOrigin = '*', backWait = null;
 window.addEventListener('message', function (ev) {
   var m = ev.data || {};
   if (typeof m !== 'object' || String(m.type || '').indexOf('hl-') !== 0) return;
   if (!fromOurFrame(ev.source)) return;
   var target = /^https:\/\//.test(ev.origin) ? ev.origin : '*';   // the reply goes only to that one window
-  function reply(o) { o.id = m.id; o.shell = 'hl-1.0'; try { ev.source.postMessage(o, target); } catch (e) {} }
+  function reply(o) { o.id = m.id; o.shell = 'hl-1.1'; try { ev.source.postMessage(o, target); } catch (e) {} }
+  appWin = ev.source; appOrigin = target;          // remembered so the back button can talk to the app
+  if (m.type === 'hl-back-r') { if (backWait) { var f = backWait; backWait = null; f(!!m.handled); } return; }
   if (m.type === 'hl-save') { store(TOKEN_KEY, m.token || ''); if (!m.token) store(LOCK_KEY, ''); }
   else if (m.type === 'hl-get') reply({ token: read(TOKEN_KEY) });
   else if (m.type === 'hl-hello') lockAvailable.then(function (ok) { reply({ lockAvailable: !!ok, lockOn: !!lockId() }); });
@@ -235,6 +237,33 @@ document.addEventListener('visibilitychange', function () {
   if (document.hidden) { hiddenAt = Date.now(); return; }
   if (lockId() && read(TOKEN_KEY) && hiddenAt && Date.now() - hiddenAt > RELOCK_MIN * 60000) showLock();
 });
+
+// ---- phone BACK button: first goes back inside the app (closes a lead, returns to Today); on Today, press twice to exit ----
+var toastEl = document.createElement('div');
+toastEl.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:rgba(20,30,40,.92);color:#fff;' +
+  'padding:10px 16px;border-radius:20px;font-size:14px;z-index:40;display:none';
+document.body.appendChild(toastEl);
+function arm() { try { history.pushState({ hl: Date.now() }, ''); } catch (e) {} }
+function askBack() {
+  return new Promise(function (resolve) {
+    if (!appWin) return resolve(false);
+    backWait = resolve;
+    try { appWin.postMessage({ type: 'hl-back', id: 'b' + Date.now() }, appOrigin); } catch (e) { backWait = null; return resolve(false); }
+    setTimeout(function () { if (backWait === resolve) { backWait = null; resolve(false); } }, 900);
+  });
+}
+var exitTimer = null;
+window.addEventListener('popstate', function () {
+  if (!document.getElementById('setup').classList.contains('hidden')) { closeSetup({ ok: false }); arm(); return; }
+  if (!lockEl.classList.contains('hidden')) return;                 // on the lock screen: leave the app
+  askBack().then(function (handled) {
+    if (handled) return arm();
+    toastEl.textContent = 'Press back again to exit'; toastEl.style.display = 'block';
+    clearTimeout(exitTimer);
+    exitTimer = setTimeout(function () { toastEl.style.display = 'none'; if (!document.hidden) arm(); }, 2500);
+  });
+});
+arm();
 
 if (lockId() && read(TOKEN_KEY) && hasWebAuthn) { splash.classList.add('gone'); showLock(); }
 else openApp();
